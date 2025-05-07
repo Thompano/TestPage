@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AnimeWorld</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #1a1a2e;
+      color: #f0f0f0;
+    }
+    header {
+      background-color: #0f3460;
+      padding: 20px;
+      text-align: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 2.5em;
+      color: #e94560;
+    }
+    nav a {
+      color: #f0f0f0;
+      margin: 0 15px;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .hero {
+      padding: 60px 20px;
+      text-align: center;
+      background: url('https://wallpapercave.com/wp/wp2569896.jpg') center/cover no-repeat;
+      color: white;
+    }
+    .hero h2 {
+      font-size: 3em;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px 8px #000;
+    }
+    .hero p {
+      font-size: 1.2em;
+      max-width: 600px;
+      margin: auto;
+      text-shadow: 1px 1px 5px #000;
+    }
+    .features {
+      display: flex;
+      justify-content: space-around;
+      padding: 40px 20px;
+      flex-wrap: wrap;
+    }
+    .feature {
+      background: #16213e;
+      padding: 20px;
+      margin: 10px;
+      border-radius: 12px;
+      max-width: 300px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+    }
+    .feature h3 {
+      color: #e94560;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AnimeWorld</h1>
+    <nav>
+      <a href="#">Home</a>
+      <a href="#">Top Anime</a>
+      <a href="#">Genres</a>
+      <a href="#">News</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <h2>Enter the World of Anime</h2>
+    <p>Discover top-rated shows, upcoming releases, character guides, and everything anime. Whether you're a seasoned otaku or just starting out — you're welcome here.</p>
+  </section>
+
+  <section class="features">
+    <div class="feature">
+      <h3>🔥 Trending Now</h3>
+      <p>Stay up to date with what's hot in the anime world this week.</p>
+    </div>
+    <div class="feature">
+      <h3>📺 Watchlist</h3>
+      <p>Create your own anime watchlist and keep track of what you've seen.</p>
+    </div>
+    <div class="feature">
+      <h3>🧠 Anime Insights</h3>
+      <p>Deep dives into plot, character development, and behind-the-scenes stories.</p>
+    </div>
+  </section>
+</body>
+</html>

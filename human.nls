@@ -1,0 +1,282 @@
+; ********************************************************************************************************************************************************
+;***          agents2.NLS  (contains all the code for the agents2)                                                                                    ****
+;*********************************************************************************************************************************************************
+;*********************************************************************************************************************************************************
+; LOGBOOK OF UPDATES IN THIS FILE
+; --Date--- |-----Description--------------------------------------------------------------------------------|---Person(s)-------------------------------
+; 20250423    Initial template of a dummy-breed to be adapted by the project group                               Gion
+; 20250506    Implemented so that the pedestrian gets into a building                                            Mohamed      
+; 20250508    jacob                                              
+; 20250511    Adjusted so that the human-breed adapts to the new nodes                                           Mohamed                                                                                           Mohamed
+;
+;********************end logbook ************************************************************************************************************************
+;*********************************************************************************************************************************************************
+; LOCAL VARIABLES
+globals [
+  ;human-nodes
+]
+humans-own [
+ speed
+ 
+ target_node_x
+ target_node_y
+  
+  
+ entering_building
+  
+  
+ bool-at-intersektion
+ check-intersektion-threshhold
+  
+  
+ rest-time
+  
+ bool-at-location
+ bool-just-entered-building
+ bool-in-bound
+ bool-needs-new-location
+  
+  
+  
+ state
+ bool-to-update-state
+]
+;******************* end local variables *****************************************************************************************************************
+;**********************************************************************************************************************************************************
+; SETUP FUNCTIONS
+to setup-humans
+  repeat 1 [
+    create-humans 1 [
+      set speed 0.4
+      set shape "person"
+      set size 2
+      set heading 180 
+      set color white
+      setxy (-77 + random 3) (-10 + random 35) 
+      set target_node_x -70
+      set target_node_y 76
+      set entering_building 0
+      set bool-at-intersektion 0
+      set check-intersektion-threshhold 0
+      set bool-in-bound 1
+      
+      set rest-time 10000
+      
+      set bool-just-entered-building 0
+      set bool-needs-new-location 0
+      set state "walking around"
+    ]
+  ]
+
+end 
+
+;---- specific setup functions, ; add your own code!
+
+;***************************end setup functions ******************************************************************************************************************
+;************************************************************************************************************************************************************
+; UPDATE BELIEFS
+
+to updateBeliefs-human
+ if state = "walking around" [
+    move-human 
+    check-if-at-intersektion-human ; if true, a new heading is choosen
+    check-if-at-target-human ;if true, state updates
+ ]
+ if state = "entering building" [
+    move-human
+    check-if-enterd-building ;if true, a rest-time is given and state updates
+  ]
+  if state = "resting" [
+    decrement-rest-time
+    check-if-rest-time-is-over ; leaves building if true, also updates state
+  ]
+  if state = "leaving building" [
+    move-human
+    check-if-back-on-road ; updates state to walking around if true
+  ]
+  
+  ;if state 
+end 
+;***************************end update beliefs ******************************************************************************************************************
+;************************************************************************************************************************************************************
+; REACTIVE SUBSUMPTION HIERARCHY
+
+to reactive-human
+ 
+  
+ if (bool-at-intersektion = 1)[
+  choose-direction
+  set bool-at-intersektion 0
+ ]
+end 
+
+
+
+;***************************end reactive subsumption hierarchy ***************************************************************************************************
+;************************************************************************************************************************************************************
+; PROACTIVE BEHAVIOR
+
+to proactive-human
+  if bool-just-entered-building = 1 [
+    get-rest-time
+    set bool-just-entered-building 0
+  ]
+  if bool-needs-new-location = 1 [
+    get-new-target
+    set bool-needs-new-location 0
+  ]
+end ;study
+
+;***************************end proactive behavior ***************************************************************************************************
+;*****************************************************************************************************************************************************
+
+
+
+;uppdate beliefs functions
+to move-human
+  fd (1 * speed)
+end
+
+
+
+
+
+
+
+; reactive funktions
+to check-if-at-intersektion-human
+  if check-intersektion-threshhold != 0[
+    set check-intersektion-threshhold check-intersektion-threshhold - 1
+  ]
+  
+  if ( check-intersektion-threshhold = 0 and (
+    (6 <= ycor and ycor <= 9) or
+    (-8 <= ycor and ycor <= -5) or
+    (35 <= ycor and ycor <= 38) or
+    (77 <= ycor and ycor <= 80) or
+    (49 <= ycor and ycor <= 52) or
+    (-36 <= ycor and ycor <= -33) or
+    (-49 <= ycor and ycor <= -46) or
+    (-77 <= ycor and ycor <= -74)
+    )) [
+    if (
+      (6 <= xcor and xcor <= 9) or
+      (-8 <= xcor and xcor <= -5) or
+      (35 <= xcor and xcor <= 38) or
+      (77 <= xcor and xcor <= 80) or
+      (49 <= xcor and xcor <= 52) or
+      (-36 <= xcor and xcor <= -33) or
+      (-49 <= xcor and xcor <= -46) or
+      (-77 <= xcor and xcor <= -74)
+      ) [
+         set bool-at-intersektion 1
+    ]
+  ]
+  
+end
+
+to choose-direction
+  let angle-to-node towardsxy target_node_x target_node_y
+  if angle-to-node > 315 or angle-to-node <= 45[
+    set heading 0
+  ]
+  if angle-to-node > 45 and angle-to-node <= 135[
+    set heading 90
+  ]
+  if angle-to-node > 135 and angle-to-node <= 225[
+    set heading 180
+  ]
+  if angle-to-node > 225 and angle-to-node <= 315[
+    set heading 270
+  ]
+  set check-intersektion-threshhold 10
+  set bool-at-intersektion 0
+  
+end
+
+
+to check-if-at-target-human
+  let x-diff abs(xcor - target_node_x)
+  let y-diff abs(ycor - target_node_y)
+  if x-diff < 1 and y-diff < 4 [
+    set target_node_y target_node_y - 10
+    set heading 180
+    set state "entering building"
+  ]
+end
+
+
+to check-if-enterd-building
+  let y-diff abs(ycor - target_node_y)
+  if y-diff < 1 [
+    set target_node_y target_node_y - 10
+    set speed 0
+    set bool-just-entered-building 1
+    set state "resting"
+  ]
+end
+
+
+to decrement-rest-time
+  set rest-time rest-time - 1
+  ;print rest-time
+end
+
+to check-if-rest-time-is-over
+  if rest-time = 0 [
+    set heading 0
+    set speed 0.1
+    set bool-needs-new-location 1
+    set state "leaving building"
+  ]
+end
+
+to check-if-back-on-road
+  
+  if (
+    (6 <= ycor and ycor <= 9) or
+    (-8 <= ycor and ycor <= -5) or
+    (35 <= ycor and ycor <= 38) or
+    (77 <= ycor and ycor <= 80) or
+    (49 <= ycor and ycor <= 52) or
+    (-36 <= ycor and ycor <= -33) or
+    (-49 <= ycor and ycor <= -46) or
+    (-77 <= ycor and ycor <= -74)
+    )[
+    
+    let angle-to-node towardsxy target_node_x target_node_y
+    set heading 270
+    if angle-to-node < 180 [
+      set heading 90
+    ]
+    set state "walking around"
+  ]
+end
+
+
+; proactive funktions
+
+
+to get-rest-time
+  let x random 300
+  set rest-time x
+end
+
+
+to get-new-target
+let valid-ids [0 10 20 30 40 50 60 70 80]  ; A1 to I1
+let target-id one-of valid-ids
+let target-node one-of human-nodes with [ID = target-id]
+if target-node != nobody [
+  set target_node_x [xcor] of target-node
+  set target_node_y [ycor] of target-node
+]
+
+
+  
+end
+
+
+
+;***************************end help functions ***************************************************************************************************
+;*****************************************************************************************************************************************************

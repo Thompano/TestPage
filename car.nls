@@ -1,0 +1,533 @@
+; ********************************************************************************************************************************************************
+;***          CAR.NLS                                                                                                                                 ****
+;*********************************************************************************************************************************************************
+;*********************************************************************************************************************************************************
+; LOGBOOK OF UPDATES IN THIS FILE
+; --Date--- |-----Description--------------------------------------------------------------------------------|---Person(s)-------------------------------
+; 20250423    Initial template of a dummy-breed to be adapted by the project group                               Gion
+; 20250429    Integrated reactive and proactive behavior for cars from earlier code                              Bartosz and Andreas
+; 20250429    Updated "deliberate-intention" and "fill-route-plans" to the new nodes coordination                Thomas
+; 20250430    Added attribute car-type to car, and specified current behavior to that type of car                Andreas
+; 20250430    Made global enums for location car-nodes. Changed to using enums in get route plan                 Andreas
+; 20250430    Simplified function get-route-plans, deleted function fill-route-plans                             Andreas
+; 20250430    Deleted set next-state in find-new-direction, deleted next-state in cars-own                       Andreas
+; 20250430    Added attribute waiting-time and state waiting so the cars wait for 100 ticks when on goal         Andreas
+; 20250501    Removed code for old functionality for time-check in deliberate intention and replaced with new    Andreas
+; 20250502    Simplified code in deliberate-intention-function, fixed bugg making the car drive out from street  Andreas
+; 20250502    Added attributes to car for charging and functionality for consuming energy when driving           Andreas
+; 20250503    Bartosz developed loads of stuff that he needs to put in the log here                              Bartosz
+; 20250504    Added functionality. Car drives to charging when battery low, charge and then drive to homes       Andreas
+; 20250506    Moved code for consuming energy and waiting to car-reactive-act. Removed code for checking if road Andreas
+; 20250507    Fixed traffic-lights? So it doesn't detect opposite traffic-light as obstacles-ahead               Thomas
+; 20250509    Added new car-type (driving-around) with different behaviour                                       Andreas
+; 20250512    Added messaging chargerstatus from charging, parameter to car-own                                  Andreas
+; 20250512    Added function for going thru messages                                                             Andreas
+;
+;
+;********************end logbook ************************************************************************************************************************
+;*********************************************************************************************************************************************************
+;
+
+
+; GLOBAL VARIABLES
+globals [
+  
+  ;Location Car-nodes
+  school ;32
+  homes ;33
+  disco ;34
+  charging ;42
+  var
+  car-limit ;How many cars can exist in the world 
+  car-count ;Current car count
+  charger-occupied-informed
+]
+;
+;******************* end global variables *****************************************************************************************************************
+;**********************************************************************************************************************************************************
+; LOCAL VARIABLES
+cars-own [
+  state
+  speed
+  
+  ;Proactive variables
+  at-node
+  destination-plan
+  arived-node
+  arived-goal
+  goal
+  current-location
+  charger-occupied-known 
+  
+  waiting-time
+  agTimer1  ; Used for time library
+  agAlarm1  ; Used for time library
+  state-of-charge
+  low-battery
+  -----
+  obstacles-ahead
+  pathway-destinations-left
+  arived-at-node
+  car-type
+  incoming-queue 
+]
+;******************* end local variables *****************************************************************************************************************
+;**********************************************************************************************************************************************************
+
+;***************************end setup functions ******************************************************************************************************************
+;************************************************************************************************************************************************************
+; UPDATE BELIEFS
+to update-beliefs-car
+  ; Percepts
+  ; stored in own attributes
+  set obstacles-ahead obstacles?
+  set pathway-destinations-left length destination-plan
+  set arived-at-node arived-node
+  if state-of-charge < 20000 [
+      set low-battery true
+      ;print "low battery"
+    ]
+  go-thru-messages
+end
+
+;***************************end update beliefs ******************************************************************************************************************
+;************************************************************************************************************************************************************
+; REACTIVE SUBSUMPTION HIERARCHY
+to car-reactive-decide
+  if arived-at-node and pathway-destinations-left > 0[ ;arived at subgoal but not at goal
+    set state "at-sub-goal"
+  ]
+  if arived-at-node and pathway-destinations-left = 0 and not (state = "planning") 
+  and not (state = "waiting") and not (state = "charging") [ ; arived at goal
+    if not (state = "moving") ;used to not get stuck in state at-goal
+    [
+      set state "at-goal"
+    ]
+  ]
+
+  if state = "stopped" and not obstacles-ahead [ ; is needed to not get stuck in state stopped
+    set state "moving"
+  ]
+  if state = "moving" and obstacles-ahead [ ; if humans, cars or red lights ahead. 
+    set state "stopped"
+  ]
+end
+
+to car-reactive-act
+  if state = "stopped" [
+    set speed 0
+  ]
+  if state = "moving" [
+    chose-heading (item 0 destination-plan) ; Choosing heading to the first node
+    fd 1
+    set state-of-charge state-of-charge - 150  ; Energy concumption for car for every tick driving                  
+  ]
+  if state = "at-sub-goal" [ 
+    set destination-plan but-first destination-plan ; remove first item in list and move everyting one index lower
+    if length destination-plan > 0 [
+      chose-heading (item 0 destination-plan) ; direct car towards next node
+      adjust-pos-crossing (item 0 destination-plan) ; Adjust position so start on right place on road                                          
+      set state  "moving"
+    ]
+  ]
+  if state = "at-goal" [ 
+    ;print state
+    hide-car
+    ifelse goal = charging [
+      set state "charging"
+      charging-function
+    ]
+    [
+      set state "waiting"
+    ] 
+  ]
+  if state = "waiting" [
+    ;print state
+    set waiting-time (waiting-time + 1)
+    handle-schedule
+  ]
+  if state = "charging" [
+    charging-function
+  ]
+  if state = "leaving" [
+    if space? [
+      show-car
+      set state "planning"
+    ]
+  ]
+end
+  
+;***************************end reactive subsumption hierarchy ***************************************************************************************************
+;************************************************************************************************************************************************************
+; PROACTIVE BEHAVIOR
+
+to car-deliberate
+  if state = "planning"[ ; Proactive part
+    
+    ;let msg create-message "inform"
+    ;set msg add-content "I am king of the world" msg
+    ;ask car 208 [
+     ;set msg add-receiver (word who) msg 
+    ;]
+    ;send msg
+
+    set current-location goal ; Fixes problem with getting location in deliberate-intention function
+    ;print state
+    if car-type = "robotaxi-north" [
+      deliberate-intention-robotaxi-north ;Choose goal based on current location and time of day
+      get-route-plan current-location goal ; get new route plan
+      set state "moving" ; När skapat ny plan, direkt börja köra
+      ;print word "new destination-plan: " destination-plan
+    ]
+    if car-type = "driving-around" [
+      deliberate-intention-driving-around-car
+      get-route-plan current-location goal
+      set state "moving"
+      ;print word "new destination-plan: " destination-plan
+    ]
+    ; Here can more different type of behaviors be added for different car-types
+  ]
+end
+
+
+;***************************end proactive behavior ***************************************************************************************************
+;*****************************************************************************************************************************************************
+; HELP FUNCTIONS
+
+
+to go-thru-messages
+  let msg 0
+  let performative 0
+  let msg-content ""
+   while [not empty? incoming-queue][
+    set msg get-message
+    set performative get-performative msg
+    if performative = "inform" [
+      set msg-content get-content msg
+      if msg-content = "charger occupied" [
+        set charger-occupied-known true
+        print "setting charger occupied-known true"
+      ]
+      if msg-content = "charger vaccant" [
+        set charger-occupied-known false
+        print "setting charger occupied-known false"
+      ]
+    ]
+  ]
+end
+
+to charging-function
+  if charger-occupied-informed = false [
+    let msg create-message "inform"
+    set msg add-content "charger occupied" msg
+    broadcast-to cars msg self
+    set charger-occupied-informed true
+  ]
+  
+  ifelse state-of-charge < 100000 [ ;charges to 100 kw
+    set state-of-charge state-of-charge + 500
+  ][
+    set low-battery false
+    
+    let msg create-message "inform"
+    set msg add-content "charger vaccant" msg
+    broadcast-to cars msg self
+    
+    set state "leaving"
+    set charger-occupied-informed false
+  ]
+end
+
+to hide-car
+  hide-turtle
+end
+
+to show-car
+  show-turtle
+end
+
+to-report space?
+  report not (any? (cars with [not hidden?]) in-radius 6)
+end
+
+to handle-schedule
+  set current-location goal
+  ;print current-location
+  if car-type = "robotaxi-north" [
+    if getCurrentHour > 16 and current-location = homes [
+      set state "leaving"
+    ]
+    if getCurrentHour < 16 and current-location = school [
+      set state "leaving"
+    ]
+    if getCurrentHour > 19 and current-location = disco [
+      set state "leaving"
+    ]
+  ]
+  if car-type = "driving-around" [
+    set state "leaving"
+  ]
+end
+
+;deliberation
+to deliberate-intention-robotaxi-north
+  if current-location = charging [
+    set goal homes
+  ]
+  if current-location = school [
+    set goal homes 
+  ]
+  if current-location = disco [
+    set goal homes
+  ]
+  if current-location = homes [
+    if getCurrentHour >= 7 and getCurrentHour <= 17 [ ;daytime  
+      set goal school
+    ]
+    if getCurrentHour < 7 or getCurrentHour > 17 [ ; nighttime     
+      set goal disco   
+    ]  
+  ]
+  if low-battery [
+    set goal charging
+  ]
+end
+
+to deliberate-intention-driving-around-car
+   if current-location = charging [
+    set goal 19
+  ]
+  if current-location = 4 [
+    set goal 6
+  ]
+  if current-location = 6 [
+    set goal 10
+  ]
+  if current-location = 10 [
+    set goal 19
+  ]
+  if current-location = 19 [
+    set goal 4
+  ]
+  if low-battery [
+    set goal charging
+  ]
+end
+
+; gets route plans based on start location and goal
+to get-route-plan [start-l goal_] 
+  set destination-plan scan-nodes start-l goal
+end
+
+; Used to change startposition when heading to new node so it starts from right place on the crossing
+to adjust-pos-crossing [node-id]
+  
+  let target-node one-of nodes with [id = node-id]
+  let hx [xcor] of target-node
+  let hy [ycor] of target-node
+  
+  
+   if heading < 100 and heading > 80 [ ;if headed east, move 2 patches south
+    setxy xcor (hy - 2)
+  ]
+  if heading < 190 and heading > 170 [ ; if headed south, move 2 patches west
+    setxy (hx - 2) ycor
+  ]
+  if heading < 280 and heading > 260 [ ; if headed west, move 2 patches north
+    setxy xcor (hy + 2)
+  ]
+  if heading < 10 or heading > 350 [ ; if headed north, move 2 patches east
+    setxy (hx + 2) ycor
+  ]
+end
+
+; Choose heading towards next node.  
+; Sets if car have arived to next node true or false.
+; Needs to be done here because offset from midle of road are in this function
+to chose-heading [node-id]
+  let target-node one-of nodes with [id = node-id]
+  let hx [xcor] of target-node
+  let hy [ycor] of target-node
+  let y-offset 0
+  let x-offset 0
+
+  ; Förskjutning beroende på riktning, används för att bilen ska köra på sin vägbana
+  if heading < 100 and heading > 80 [
+    set y-offset -2
+  ]
+  if heading < 190 and heading > 170 [
+    set x-offset -2
+  ]
+  if heading < 280 and heading > 260 [
+    set y-offset 2
+  ]
+  if heading < 10 or heading > 350 [
+    set x-offset 2
+  ]
+
+  let target-x hx + x-offset
+  let target-y hy + y-offset
+    
+  
+  ; Kolla om kommit tillräckligt nära nästa node. Sätt isåfall arived till true
+  ifelse distancexy target-x target-y < 1 [
+    set arived-node true
+  ] [
+    set heading towardsxy target-x target-y
+    ;set planed? false
+    set arived-node false
+  ]
+end
+
+;---------------
+
+; if close cars or humans or red traffic light report true
+to-report obstacles?
+  report close-cars? or close-humans? or traffic-lights?
+end
+
+to-report close-cars?
+  report (any? other (cars with [not hidden?]) in-cone 8 30)
+end
+
+to-report close-humans?
+  report  (any? humans in-cone 4 120)
+end
+
+to-report traffic-lights?  ; For cars
+  ask cars  [ set heading heading + 45]
+  let a (any? (traffic-lights in-cone 5 90 with [color = red and size = 3]))
+  ask cars  [ set heading heading - 45]
+  report a ; Only check vehicle lights
+end
+
+; SETUP FUNCTIONS
+to setup-cars
+  
+  ; Connects location to node-nr
+  set school 32
+  set homes 33
+  set disco 34
+  set charging 42
+  
+  set charger-occupied-informed false
+  
+  set var 9
+  
+  set car-limit 100
+  set car-count 0
+  
+  create-drive-around-car
+  
+  if car-count < car-limit [
+    spawn-car school 2
+    spawn-car disco 2
+    spawn-car homes 2
+  ]  
+  
+end
+
+to spawn-car [node-id num]
+  let target-node one-of nodes with [id = node-id]
+  let hx ([xcor] of target-node - 2)
+  let hy ([ycor] of target-node - 1)
+  create-cars num[
+    set shape "car top"
+    set color red
+    set size 4
+    setxy hx hy
+    set heading 180    
+    set speed 1
+    
+    set state "at-goal"
+    set arived-node false
+    set arived-goal true
+    set goal node-id
+    set current-location node-id
+    set destination-plan scan-nodes node-id node-id;[12 7 2 21 33]
+    ;print destination-plan
+    
+    set waiting-time 0
+    set car-type "robotaxi-north"
+    set state-of-charge (60000 + random 40000)
+    set low-battery false
+    set incoming-queue[]
+  ]
+end
+
+;***************************end help functions ***************************************************************************************************
+;*****************************************************************************************************************************************************
+to create-car
+  if getCurrentHour = var [
+    create-cars 1[
+      set shape "car top"
+      set color red
+      set size 4
+      setxy 2 -6
+      set heading 0
+      set state "stopped"
+      set speed 1
+      set waiting-time 0
+      set destination-plan scan-nodes 12 homes;[12 7 2 21 33]
+      set arived-node false
+      set arived-goal false
+      set goal homes
+      set current-location homes
+      set car-type "robotaxi-north"
+      set state-of-charge (8000 + random 2000)
+      set low-battery false
+      set incoming-queue[]
+    ]
+    if var < 12 [
+      set var (var + 1)
+    ]
+  ]
+end
+
+to create-drive-around-car
+  create-cars 1 [
+    set shape "car top"
+    set color blue
+    set size 4
+    setxy 86 -42
+    set heading 0
+    set state "at-goal"
+    set speed 1
+    set waiting-time 0
+    set destination-plan scan-nodes 4 14;
+    set arived-node false
+    set arived-goal false
+    set goal 19
+    set current-location 14
+    set car-type "driving-around"
+    set state-of-charge (60000 + random 40000)
+    set low-battery false
+    set charger-occupied-known false
+    set incoming-queue[]
+  ]
+end
+    
+
+to create-test-car
+  
+   create-cars 0[
+    set shape "car top"
+    set color blue
+    set size 4
+    setxy -19 72
+    set heading 0
+    set state "test"
+    set speed 1
+    set waiting-time 0
+    set destination-plan scan-nodes 12 33;[12 7 2 21 33]
+    set arived-node false
+    set arived-goal false
+    set goal homes
+    set current-location homes
+    set car-type "robotaxi-north"
+    set state-of-charge (8000 + random 2000)
+    set low-battery false
+    set incoming-queue[]
+  ]
+  
+end
